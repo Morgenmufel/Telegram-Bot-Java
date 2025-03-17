@@ -3,14 +3,19 @@ package renatius.node.service.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.meta.api.objects.User;
 import renatius.node.dao.AppUserDAO;
+import renatius.node.entity.AppDocument;
+import renatius.node.entity.AppPhoto;
 import renatius.node.entity.AppUser;
+import renatius.node.exceptions.UploadFileException;
 import renatius.node.repository.RawDataDAO;
 import renatius.node.entity.RawData;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import renatius.node.service.FileService;
 import renatius.node.service.MainService;
 import renatius.node.service.ProducerService;
+import renatius.node.service.ServiceCommands;
 
 import static renatius.node.entity.enums.UserState.BASIC_STATE;
 import static renatius.node.entity.enums.UserState.WAIT_FOR_EMAIL_STATE;
@@ -27,11 +32,14 @@ public class MainServiceImpl implements MainService {
 
     private final AppUserDAO appUserDAO;
 
+    private final FileService fileService;
 
-    public MainServiceImpl(RawDataDAO rawDataDAO ,ProducerService producerService, AppUserDAO appUserDAO) {
+
+    public MainServiceImpl(RawDataDAO rawDataDAO ,ProducerService producerService, AppUserDAO appUserDAO, FileService fileService) {
         this.producerService = producerService;
         this.rawDataDAO = rawDataDAO;
         this.appUserDAO = appUserDAO;
+        this.fileService = fileService;
     }
 
     @Override
@@ -41,7 +49,8 @@ public class MainServiceImpl implements MainService {
         var userState = appUser.getUserState();
         var text = update.getMessage().getText();
         var output = " ";
-        if (CANCEL.equals(text)){
+        var serviceCommand = ServiceCommands.fromValue(text);
+        if (CANCEL.equals(serviceCommand)){
             output = cancelProcess(appUser);
         } else if (BASIC_STATE.equals(userState)){
             output = processServiceCommand(appUser, text);
@@ -66,7 +75,18 @@ public class MainServiceImpl implements MainService {
         if (isNotAllowToSendContent(chatId, appUser)){
             
         }
+        try{
+            AppDocument doc = fileService.processDoc(update.getMessage());
+            //TODO добавить генерацию ссылки для скачивания
+            var answer = "Документ успешно загружен " +
+                    "Ссылка для скачивания: ...";
+            sendMessage(chatId, answer);
 
+        }catch (UploadFileException e){
+            log.error(e.toString());
+            String error = "Загрузка файла не удалась";
+            sendMessage(chatId, error);
+        }
         //TODO добавить сохранение документа
         var answer = "Документ успешно загружен.";
         sendMessage(chatId, answer);
@@ -80,10 +100,19 @@ public class MainServiceImpl implements MainService {
         var appUser = findOrSaveAppUser(update);
         var chatId = update.getMessage().getChatId();
         if (isNotAllowToSendContent(chatId, appUser)){
-
+            return;
         }
-
-        //TODO добавить сохранение документа
+        try{
+            AppPhoto photo = fileService.processPhoto(update.getMessage());
+            //TODO добавить генерацию ссылки для скачивания
+            var answer = "Фото успешно загружено! Ссылка для скачивания ...";
+            sendMessage(chatId, answer);
+        }catch (UploadFileException e){
+            log.error(e.toString());
+            var answer = "К сожалению не удалось загрузить фото =(";
+            sendMessage(chatId, answer);
+        }
+        //TODO добавить сохранение фото
         var answer = "Фото успешно загружен.";
         sendMessage(chatId, answer);
     }
