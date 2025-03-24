@@ -1,4 +1,4 @@
-package renatius.node.service;
+package renatius.node.entity.enums;
 
 public enum ServiceCommands {
     HELP("/help"),
@@ -6,6 +6,7 @@ public enum ServiceCommands {
     CANCEL("/cancel"),
     START("/start"),
     TICKETS("/tickets");
+
     private final String value;
 
     ServiceCommands(String value) {

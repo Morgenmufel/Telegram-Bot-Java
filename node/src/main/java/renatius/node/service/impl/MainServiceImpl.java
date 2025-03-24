@@ -1,25 +1,29 @@
 package renatius.node.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.telegram.telegrambots.meta.api.objects.User;
 import renatius.node.dao.AppUserDAO;
-import renatius.node.entity.AppDocument;
-import renatius.node.entity.AppPhoto;
-import renatius.node.entity.AppUser;
+import renatius.node.entity.*;
 import renatius.node.exceptions.UploadFileException;
-import renatius.node.repository.RawDataDAO;
-import renatius.node.entity.RawData;
+import renatius.node.dao.RawDataDAO;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import renatius.node.service.FileService;
 import renatius.node.service.MainService;
+import renatius.node.service.ParsingService;
 import renatius.node.service.ProducerService;
-import renatius.node.service.ServiceCommands;
+import renatius.node.entity.enums.ServiceCommands;
+
+import java.io.IOException;
+import java.util.ArrayList;
 
 import static renatius.node.entity.enums.UserState.BASIC_STATE;
 import static renatius.node.entity.enums.UserState.WAIT_FOR_EMAIL_STATE;
-import static renatius.node.service.ServiceCommands.*;
+import static renatius.node.entity.enums.ServiceCommands.*;
 
 
 @Service
@@ -34,12 +38,15 @@ public class MainServiceImpl implements MainService {
 
     private final FileService fileService;
 
+    private final ParsingService parsingService;
 
-    public MainServiceImpl(RawDataDAO rawDataDAO ,ProducerService producerService, AppUserDAO appUserDAO, FileService fileService) {
+
+    public MainServiceImpl(RawDataDAO rawDataDAO ,ProducerService producerService, AppUserDAO appUserDAO, FileService fileService, ParsingService parsingService) {
         this.producerService = producerService;
         this.rawDataDAO = rawDataDAO;
         this.appUserDAO = appUserDAO;
         this.fileService = fileService;
+        this.parsingService = parsingService;
     }
 
     @Override
@@ -143,19 +150,33 @@ public class MainServiceImpl implements MainService {
 
 
     private String processServiceCommand(AppUser appUser, String text) {
-        if (REGISTRATION.equals(text)){
+        if (REGISTRATION.equals(ServiceCommands.fromValue(text))){
             //TODO реализовать регистрацию
             return "Временно недоступно";
-        } else if (HELP.equals(text)){
+        } else if (HELP.equals(ServiceCommands.fromValue(text))){
            return help();
-        } else if (START.equals(text)){
+        } else if (START.equals(ServiceCommands.fromValue(text))){
             return "Вас приветствует бот Ренатиуса Великолепный. " +
                     "Когда он правил ещё не придумали слово пиздатый, " +
                     "поэтому его назвали великолепный. Чтобы узнать список великолепных комманд введите /help";
+        } else if (TICKETS.equals(ServiceCommands.fromValue(text))) {
+            try {
+                Document doc = parsingService.getHTMLDocument("https://www.ticketpro.by/");
+                Elements elements = parsingService.getTickets(doc);
+                ArrayList<UpComingEvents> tickets = parsingService.getUpComingEvents(elements);
+                String str = "Предстоящие события: ";
+                for (UpComingEvents event : tickets) {
+                    str += "\n" + "\n" + event.toString();
+                }
+                return str;
+            }catch (IOException e){
+                log.error(e.toString());
+            }
         } else{
             log.error("Unknown command :" + text);
             return "Неизвестная команда. Попробуйте ввести /cancel и начать сначала.";
         }
+        return null;
     }
 
     public String help() {
@@ -164,7 +185,7 @@ public class MainServiceImpl implements MainService {
                 "/registration - регистрация пользователя\n" +
                 //TODO доработать остальные команды
                 "/start - начать\n" +
-                "/tickets - узнать ближайшие афиши\n" +
+                "/tickets - узнать ближайшие события\n" +
                 "/help - узнать все команды";
     }
 
@@ -203,5 +224,19 @@ public class MainServiceImpl implements MainService {
         sendMessage.setChatId(message.getChatId().toString());
         sendMessage.setText("Данные сохранены");
         producerService.produceAnswer(sendMessage);
+    }
+    @Override
+    public Elements getTags(String html) throws IOException {
+        Document doc = parsingService.getHTMLDocument(html);
+        Elements ticketBoxes = parsingService.getTickets(doc);
+        for (Element ticketBox : ticketBoxes) {
+            System.out.println(ticketBox.html());
+        }
+        return ticketBoxes;
+    }
+
+
+    public ArrayList<UpComingEvents> getEvents(Elements elements){
+        return parsingService.getUpComingEvents(elements);
     }
 }

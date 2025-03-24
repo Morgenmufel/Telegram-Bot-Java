@@ -1,4 +1,4 @@
-package renatius.node.repository;
+package renatius.node.dao;
 
 import renatius.node.entity.RawData;
 import org.springframework.data.jpa.repository.JpaRepository;
